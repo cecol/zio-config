@@ -1,8 +1,6 @@
 package zio.config.typesafe
 
 import zio.config.ConfigDescriptor.{ int, nested, string }
-import zio.config.ReadError.Step.Key
-import zio.config.ReadError.{ FormatError, OrErrors }
 import zio.config.magnolia.DeriveConfigDescriptor.descriptor
 import zio.config.read
 import zio.test.Assertion._
@@ -83,23 +81,9 @@ object TypesafeConfigErrorsSpec extends DefaultRunnableSpec {
         }
       val nestedConfigAutomaticExpect3 = Right(AwsConfig(Account("us-east", "jon"), None))
 
-      val nestedConfigAutomaticResult4 = TypesafeConfigSource.fromHoconString(hocconStringWithDbWithParseError) match {
-        case Left(value)   => Left(value)
-        case Right(source) => read(configNestedAutomatic from source)
-      }
-      val nestedConfigAutomaticExpect4 = Left(
-        OrErrors(
-          List(
-            FormatError(List(Key("database"), Key("port")), "Provided value is 1ab200, expecting the type int"),
-            FormatError(List(Key("database")), "Provided value is of type Record, expecting the type Leaf")
-          )
-        )
-      )
-
       assert(nestedConfigAutomaticResult1)(equalTo(nestedConfigAutomaticExpect1)) &&
       assert(nestedConfigAutomaticResult2)(equalTo(nestedConfigAutomaticExpect2)) &&
-      assert(nestedConfigAutomaticResult3)(equalTo(nestedConfigAutomaticExpect3)) &&
-      assert(nestedConfigAutomaticResult4)(equalTo(nestedConfigAutomaticExpect4))
+      assert(nestedConfigAutomaticResult3)(equalTo(nestedConfigAutomaticExpect3))
     },
     test("A variant error case with a not well-formed typesafe HOCON config") {
       val hocconStringWithParseError =

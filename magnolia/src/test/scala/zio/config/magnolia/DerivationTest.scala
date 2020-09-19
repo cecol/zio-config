@@ -4,7 +4,6 @@ import zio.config._, ConfigDescriptorAdt._
 import zio.config.PropertyTree
 import zio.config.PropertyTree.Leaf
 import zio.config.PropertyTree.Record
-import zio.config.ConfigSource
 import zio.config.magnolia.DeriveConfigDescriptor.descriptor
 import zio.test.Assertion._
 import zio.test._
@@ -41,10 +40,18 @@ object DerivationTest extends DefaultRunnableSpec {
       )
     },
     test("support name annotation") {
-      @name("SealedTrait")
-      sealed trait St
+
+      val customDerivation = new DeriveConfigDescriptor {
+        import Descriptor.SealedTraitStrategy._
+        override def mapClassName(name: String): String                  = name
+        override def mapFieldName(name: String): String                  = name
+        override def sealedTraitStrategy: Descriptor.SealedTraitStrategy = wrapSealedTraitName && wrapSubClassName
+      }
+
+      @name("St")
+      sealed trait SealedTrait
       @name("className")
-      case class Cfg(@name("otherName") fname: String) extends St
+      case class Cfg(@name("otherName") fname: String) extends SealedTrait
 
       def collectPath[T](desc: ConfigDescriptor[T]): List[String] = desc match {
         case Default(config, _)        => collectPath(config)
@@ -60,7 +67,12 @@ object DerivationTest extends DefaultRunnableSpec {
         case XmapEither(config, _, _)  => collectPath(config)
       }
 
-      assert(collectPath(descriptor[St]))(equalTo("SealedTrait" :: "className" :: "otherName" :: Nil))
+      // IntelliJ will hide this, however it is required
+      import customDerivation._
+
+      assert(collectPath(customDerivation.getDescriptor[SealedTrait].desc))(
+        equalTo("St" :: "className" :: "otherName" :: Nil)
+      )
     },
     test("support default value") {
       @describe("class desc")
@@ -97,41 +109,9 @@ object DerivationTest extends DefaultRunnableSpec {
         if (depth > 0) Record(Map("a" -> PropertyTree.Sequence(List(loop(depth - 1)))))
         else Leaf("str")
 
-      val src = ConfigSource.fromPropertyTree(loop(5), "tree")
+      val src = ConfigSource.fromPropertyTree(loop(5), "tree", LeafForSequence.Valid)
 
       val res = read(descriptor[A5] from src)
-
-      assert(res)(isRight(anything))
-    },
-    test("support lists non-recursive") {
-      import NonRecursiveDerivation.descriptor
-      import NonRecursiveListHelper._
-
-      def loop(depth: Int): PropertyTree[String, String] =
-        if (depth > 0) Record(Map("a" -> PropertyTree.Sequence(List(loop(depth - 1)))))
-        else Leaf("str")
-
-      val src = ConfigSource.fromPropertyTree(loop(5), "tree")
-
-      val res = read(descriptor[A5] from src)
-
-      assert(res)(isRight(anything))
-    },
-    test("support nested lists non-recursive") {
-      import NonRecursiveDerivation.{ descriptor, Descriptor }
-
-      case class A(a: List[String])
-      implicit val cA: Descriptor[A] = descriptor[A]
-      val _                          = cA
-      case class B(a: List[List[List[List[List[List[List[List[List[List[A]]]]]]]]]])
-
-      def loop(depth: Int): PropertyTree[String, String] =
-        if (depth > 0) PropertyTree.Sequence(List(loop(depth - 1)))
-        else Record(Map("a" -> PropertyTree.Sequence(List(Leaf("s")))))
-
-      val src = ConfigSource.fromPropertyTree(Record(Map("a" -> loop(10))), "tree")
-
-      val res = read(descriptor[B] from src)
 
       assert(res)(isRight(anything))
     },
@@ -143,26 +123,11 @@ object DerivationTest extends DefaultRunnableSpec {
         if (depth > 0) PropertyTree.Sequence(List(loop(depth - 1)))
         else Record(Map("a" -> PropertyTree.Sequence(List(Leaf("s")))))
 
-      val src = ConfigSource.fromPropertyTree(Record(Map("a" -> loop(10))), "tree")
+      val src = ConfigSource.fromPropertyTree(Record(Map("a" -> loop(10))), "tree", LeafForSequence.Valid)
 
       val res = read(descriptor[B] from src)
 
       assert(res)(isRight(anything))
     }
   )
-}
-
-object NonRecursiveListHelper {
-  import NonRecursiveDerivation.{ descriptor, Descriptor }
-
-  case class A1(a: List[String])
-  implicit val cA1: Descriptor[A1] = descriptor[A1]
-  case class A2(a: List[A1])
-  implicit val cA2: Descriptor[A2] = descriptor[A2]
-  case class A3(a: List[A2])
-  implicit val cA3: Descriptor[A3] = descriptor[A3]
-  case class A4(a: List[A3])
-  implicit val cA4: Descriptor[A4] = descriptor[A4]
-  case class A5(a: List[A4])
-
 }

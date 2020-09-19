@@ -55,7 +55,7 @@ addCommandAlias(
 addCommandAlias("compileAll", "; ++2.11.12; root2-11/compile; ++2.12.11; root2-12/compile; ++2.13.2!; root2-13/compile")
 addCommandAlias("testAll", "; ++2.11.12; root2-11/test; ++2.12.11; root2-12/test; ++2.13.2!; root2-13/test")
 
-lazy val zioVersion       = "1.0.0-RC20"
+lazy val zioVersion       = "1.0.1"
 lazy val magnoliaVersion  = "0.16.0"
 lazy val refinedVersion   = "0.9.14"
 lazy val shapelessVersion = "2.4.0-M1"
@@ -76,7 +76,8 @@ lazy val refinedDependencies =
     else Seq("eu.timepit" %% "refined" % refinedVersion)
   }
 
-lazy val scala211projects = Seq[ProjectReference](zioConfig, zioConfigTypesafe, zioConfigShapeless, zioConfigDerivation)
+lazy val scala211projects =
+  Seq[ProjectReference](zioConfig, zioConfigTypesafe, zioConfigShapeless, zioConfigDerivation, zioConfigYaml)
 lazy val scala212projects = scala211projects ++ Seq[ProjectReference](
   zioConfigRefined,
   zioConfigMagnolia,
@@ -195,6 +196,18 @@ lazy val zioConfigTypesafe =
         "com.typesafe" % "config"        % "1.4.0",
         "dev.zio"      %% "zio-test"     % zioVersion % Test,
         "dev.zio"      %% "zio-test-sbt" % zioVersion % Test
+      ),
+      testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
+    )
+    .dependsOn(zioConfig % "compile->compile;test->test")
+
+lazy val zioConfigYaml =
+  module("zio-config-yaml", "yaml")
+    .settings(
+      libraryDependencies ++= Seq(
+        "org.snakeyaml" % "snakeyaml-engine" % "2.1",
+        "dev.zio"       %% "zio-test"        % zioVersion % Test,
+        "dev.zio"       %% "zio-test-sbt"    % zioVersion % Test
       ),
       testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
     )

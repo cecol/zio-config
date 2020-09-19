@@ -1,10 +1,10 @@
 ---
 id: configdescriptor_index
-title:  "Creation of ConfigDescriptor"
+title:  "Manual creation of ConfigDescriptor"
 ---
 
 Config Descriptor is the core of your configuration management. You can write a description by hand,
-or rely on zio-config-magnolia that can automatically generate the description for you, based on the case classes (pr sealed traits)
+or rely on zio-config-magnolia of zio-config-shapeless that can automatically generate the description for you, based on the case classes (or sealed traits)
 that represents your config.
 
 ```scala mdoc:silent
@@ -77,8 +77,10 @@ To read a config, means it has to perform some effects, and for that reason, it 
 To be specific it returns an `IO` where `type IO[E, A] = ZIO[Any, E, A]`
 
 ```scala mdoc:silent
-val result: Layer[ReadError[String], zio.config.Config[MyConfig]] =
-  Config.fromSystemEnv(myConfig) // That's system environment
+import zio.system.System
+
+// That's system environment
+val result: Layer[ReadError[String], zio.config.ZConfig[MyConfig]] = System.live >>> ZConfig.fromSystemEnv(myConfig)
 ```
 
 Another way of doing this is:
@@ -280,7 +282,7 @@ We can apply the `Either` logic at a much more global level, as in, give me eith
 case class Dev(userName: String, password: String)
 case class Prod(token: String, code: Int)
 
-type Config = Either[Prod, Dev]
+type ZConfig = Either[Prod, Dev]
 
 val dev = (string("USERNAME") |@| string("PASSWORD"))(Dev.apply, Dev.unapply)
 val prod = (string("TOKEN") |@| int("CODE"))(Prod.apply, Prod.unapply)
@@ -361,7 +363,7 @@ any other configuration parsing libraries that deal with file formats such as HO
       "appName"          -> "myApp"
     )
 
-  Config.fromMap(constantMap, appConfig)
+  ZConfig.fromMap(constantMap, appConfig)
 ```
 
 Note that, you can write this back as well. This is discussed in write section
@@ -460,3 +462,5 @@ Note that `autoListConfig` (automatically generated) config, is exactly similar 
     )
 
 ```
+
+Please find more details on the behaviour of `List` for various sources in `Sources` section of the documentation.

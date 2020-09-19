@@ -4,8 +4,6 @@ import zio.blocking.Blocking
 import zio.config._
 import ConfigDescriptor._
 import zio.config.examples.aliases._
-import zio.config.config
-import zio.config.Config
 import zio.console.Console
 import zio.{ console, App, ExitCode, Has, ZEnv, ZIO, ZLayer }
 
@@ -26,7 +24,7 @@ object ProgramExample extends App {
       Application.execute.provideLayer(
         ZLayer.requires[Blocking] ++
           ZLayer.requires[Console] ++
-          Config.fromMap(Map("INPUT_PATH" -> "input", "OUTPUT_PATH" -> "output"), programConfig, "constant") ++
+          ZConfig.fromMap(Map("INPUT_PATH" -> "input", "OUTPUT_PATH" -> "output"), programConfig, "constant") ++
           SparkEnv.local("some-app")
       )
 
@@ -81,9 +79,9 @@ object SparkEnv {
 // The core application
 object Application {
 
-  val logProgramConfig: ZIO[Console with Config[ProgramConfig], Nothing, Unit] =
+  val logProgramConfig: ZIO[Console with ZConfig[ProgramConfig], Nothing, Unit] =
     for {
-      r <- config[ProgramConfig]
+      r <- getConfig[ProgramConfig]
       _ <- zio.console.putStrLn(s"Executing with parameters ${r.inputPath} and ${r.outputPath} without sparkSession")
     } yield ()
 
@@ -94,14 +92,14 @@ object Application {
       _       <- zio.console.putStrLn(s"Executed something with spark ${session.version}: $result")
     } yield ()
 
-  val processData: ZIO[SparkEnv with Config[ProgramConfig] with Console, Throwable, Unit] =
+  val processData: ZIO[SparkEnv with ZConfig[ProgramConfig] with Console, Throwable, Unit] =
     for {
-      conf  <- config[ProgramConfig]
+      conf  <- getConfig[ProgramConfig]
       spark <- ZIO.access[SparkEnv](_.get.sparkEnv)
       _     <- zio.console.putStrLn(s"Executing ${conf.inputPath} and ${conf.outputPath} using ${spark.version}")
     } yield ()
 
-  val execute: ZIO[SparkEnv with Config[ProgramConfig] with Console with Blocking, Throwable, Unit] =
+  val execute: ZIO[SparkEnv with ZConfig[ProgramConfig] with Console with Blocking, Throwable, Unit] =
     for {
       _ <- logProgramConfig
       _ <- runSparkJob

@@ -1,7 +1,6 @@
 package zio.config.shapeless
 
 import zio.config.PropertyTree.{ Leaf, Record, Sequence }
-import zio.config.ConfigSource
 import zio.test.Assertion._
 import zio.test._
 import zio.config._
@@ -14,6 +13,14 @@ object OverrideDerivationTestEnv extends DeriveConfigDescriptor {
   val wrapSealedTraits: Boolean       = false
 }
 
+object OverrideDerivationTestWithWrappedSealedTraitName extends DeriveConfigDescriptor {
+  override def mapClassName(name: String): String = toSnakeCase(name)
+  override def mapFieldName(name: String): String = toSnakeCase(name)
+
+  val wrapSealedTraitClasses: Boolean = true
+  val wrapSealedTraits: Boolean       = true
+}
+
 object OverrideDerivationTest extends DefaultRunnableSpec {
   val spec = suite("OverrideDerivationTest")(
     test("simple config") {
@@ -21,10 +28,14 @@ object OverrideDerivationTest extends DefaultRunnableSpec {
 
       case class Cfg(fieldName: String)
 
-      val res = write(descriptor[Cfg], Cfg("a"))
+      val res = write(getDescriptor[Cfg].configDescriptor, Cfg("a"))
 
       assert(res)(isRight(equalTo(Record(Map("prefix_field_name" -> Leaf("a")))))) &&
-      assert(res.map(ConfigSource.fromPropertyTree(_, "tree")).flatMap(v => read(descriptor[Cfg] from v)))(
+      assert(
+        res
+          .map(ConfigSource.fromPropertyTree(_, "tree", LeafForSequence.Valid))
+          .flatMap(v => read(getDescriptor[Cfg].configDescriptor from v))
+      )(
         isRight(equalTo(Cfg("a")))
       )
     },
@@ -39,13 +50,13 @@ object OverrideDerivationTest extends DefaultRunnableSpec {
 
       case class Outer(list: List[Inner])
 
-      implicit val cInner: Descriptor[Inner] = descriptor[Inner]
+      implicit val cInner: Descriptor[Inner] = getDescriptor[Inner]
 
       val _ = cInner
 
       val cfg = Outer(List(OtherOBJECT, Obj1Name, ClassWithValue("a"), ClassWithData("b")))
 
-      val res = write(OverrideDerivationTestEnv.descriptor[Outer], cfg)
+      val res = write(OverrideDerivationTestEnv.getDescriptor[Outer].configDescriptor, cfg)
 
       val expected = Record(
         Map(
@@ -62,13 +73,15 @@ object OverrideDerivationTest extends DefaultRunnableSpec {
 
       assert(res)(isRight(equalTo(expected))) &&
       assert(
-        res.map(ConfigSource.fromPropertyTree(_, "tree")).flatMap(v => read(descriptor[Outer] from v))
+        res
+          .map(ConfigSource.fromPropertyTree(_, "tree", LeafForSequence.Valid))
+          .flatMap(v => read(getDescriptor[Outer].configDescriptor from v))
       )(
         isRight(equalTo(cfg))
       )
     },
     test("wrapped sealed hierarchy") {
-      import DeriveConfigDescriptor._
+      import OverrideDerivationTestWithWrappedSealedTraitName._
 
       sealed trait Inner
       case object Obj1Name                     extends Inner
@@ -80,7 +93,11 @@ object OverrideDerivationTest extends DefaultRunnableSpec {
 
       val cfg = Outer(List(OtherOBJECT, Obj1Name, ClassWithValue("a"), ClassWithData("b")))
 
-      val res = write(descriptor[Outer], cfg)
+      implicit val cInner: Descriptor[Inner] = getDescriptor[Inner]
+
+      val _ = cInner
+
+      val res = write(getDescriptor[Outer].configDescriptor, cfg)
 
       val expected = Record(
         Map(
@@ -98,8 +115,8 @@ object OverrideDerivationTest extends DefaultRunnableSpec {
       assert(res)(isRight(equalTo(expected))) &&
       assert(
         res
-          .map(ConfigSource.fromPropertyTree(_, "tree"))
-          .flatMap(v => read(DeriveConfigDescriptor.descriptor[Outer] from v))
+          .map(ConfigSource.fromPropertyTree(_, "tree", LeafForSequence.Valid))
+          .flatMap(v => read(getDescriptor[Outer].configDescriptor from v))
       )(
         isRight(equalTo(cfg))
       )

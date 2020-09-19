@@ -1,11 +1,10 @@
 package zio.config.shapeless
 
-import zio.config._, ConfigDescriptorAdt._
+import zio.config._
+import ConfigDescriptorAdt._
 import zio.config.PropertyTree
 import zio.config.PropertyTree.Leaf
 import zio.config.PropertyTree.Record
-import zio.config.ConfigSource
-import zio.config.shapeless.DeriveConfigDescriptor.descriptor
 import zio.test.Assertion._
 import zio.test._
 
@@ -35,12 +34,19 @@ object DerivationTest extends DefaultRunnableSpec {
         case XmapEither(config, _, _) => collectDescriptions(config, path)
       }
 
-      assert(collectDescriptions(descriptor[Cfg], None))(
+      assert(collectDescriptions(DeriveConfigDescriptor.descriptor[Cfg], None))(
         contains((None: Option[String]) -> "class desc") &&
           contains(Some("fname")        -> "field desc")
       )
     },
     test("support name annotation") {
+      val customDerivation = new DeriveConfigDescriptor {
+        override def mapClassName(name: String): String = name
+        override def mapFieldName(name: String): String = name
+        override def wrapSealedTraitClasses: Boolean    = true
+        override def wrapSealedTraits: Boolean          = true
+      }
+
       @name("SealedTrait")
       sealed trait St
       @name("className")
@@ -60,7 +66,12 @@ object DerivationTest extends DefaultRunnableSpec {
         case XmapEither(config, _, _)  => collectPath(config)
       }
 
-      assert(collectPath(descriptor[St]))(equalTo("SealedTrait" :: "className" :: "otherName" :: Nil))
+      // IntelliJ will hide this, however it is required
+      import customDerivation._
+
+      assert(collectPath(customDerivation.getDescriptor[St].configDescriptor))(
+        equalTo("SealedTrait" :: "className" :: "otherName" :: Nil)
+      )
     },
     test("support default value") {
       @describe("class desc")
@@ -84,7 +95,7 @@ object DerivationTest extends DefaultRunnableSpec {
         case XmapEither(config, _, _) => collectDefault(config, path)
       }
 
-      assert(collectDefault(descriptor[Cfg], None))(equalTo((Some("fname"), "defaultV") :: Nil))
+      assert(collectDefault(DeriveConfigDescriptor.descriptor[Cfg], None))(equalTo((Some("fname"), "defaultV") :: Nil))
     },
     test("support lists recursive") {
       case class A1(a: List[String])
@@ -97,31 +108,30 @@ object DerivationTest extends DefaultRunnableSpec {
         if (depth > 0) Record(Map("a" -> PropertyTree.Sequence(List(loop(depth - 1)))))
         else Leaf("str")
 
-      val src = ConfigSource.fromPropertyTree(loop(5), "tree")
+      val src = ConfigSource.fromPropertyTree(loop(5), "tree", LeafForSequence.Valid)
 
-      val res = read(descriptor[A5] from src)
+      val res = read(DeriveConfigDescriptor.descriptor[A5] from src)
 
       assert(res)(isRight(anything))
     },
     test("support lists non-recursive") {
-      import NonRecursiveDerivation.descriptor
       import NonRecursiveListHelper._
 
       def loop(depth: Int): PropertyTree[String, String] =
         if (depth > 0) Record(Map("a" -> PropertyTree.Sequence(List(loop(depth - 1)))))
         else Leaf("str")
 
-      val src = ConfigSource.fromPropertyTree(loop(5), "tree")
+      val src = ConfigSource.fromPropertyTree(loop(5), "tree", LeafForSequence.Valid)
 
-      val res = read(descriptor[A5] from src)
+      val res = read(NonRecursiveDerivation.getDescriptor[A5].configDescriptor from src)
 
       assert(res)(isRight(anything))
     },
     test("support nested lists non-recursive") {
-      import NonRecursiveDerivation.{ descriptor, Descriptor }
+      import NonRecursiveDerivation.{ getDescriptor, Descriptor }
 
       case class A(a: List[String])
-      implicit val cA: Descriptor[A] = descriptor[A]
+      implicit val cA: Descriptor[A] = getDescriptor[A]
       val _                          = cA
       case class B(a: List[List[List[List[List[List[List[List[List[List[A]]]]]]]]]])
 
@@ -129,9 +139,9 @@ object DerivationTest extends DefaultRunnableSpec {
         if (depth > 0) PropertyTree.Sequence(List(loop(depth - 1)))
         else Record(Map("a" -> PropertyTree.Sequence(List(Leaf("s")))))
 
-      val src = ConfigSource.fromPropertyTree(Record(Map("a" -> loop(10))), "tree")
+      val src = ConfigSource.fromPropertyTree(Record(Map("a" -> loop(10))), "tree", LeafForSequence.Valid)
 
-      val res = read(descriptor[B] from src)
+      val res = read(getDescriptor[B].configDescriptor from src)
 
       assert(res)(isRight(anything))
     },
@@ -143,9 +153,9 @@ object DerivationTest extends DefaultRunnableSpec {
         if (depth > 0) PropertyTree.Sequence(List(loop(depth - 1)))
         else Record(Map("a" -> PropertyTree.Sequence(List(Leaf("s")))))
 
-      val src = ConfigSource.fromPropertyTree(Record(Map("a" -> loop(10))), "tree")
+      val src = ConfigSource.fromPropertyTree(Record(Map("a" -> loop(10))), "tree", LeafForSequence.Valid)
 
-      val res = read(descriptor[B] from src)
+      val res = read(DeriveConfigDescriptor.descriptor[B] from src)
 
       assert(res)(isRight(anything))
     }
@@ -153,16 +163,16 @@ object DerivationTest extends DefaultRunnableSpec {
 }
 
 object NonRecursiveListHelper {
-  import NonRecursiveDerivation.{ descriptor, Descriptor }
+  import NonRecursiveDerivation._
 
   case class A1(a: List[String])
-  implicit val cA1: Descriptor[A1] = descriptor[A1]
+  implicit val cA1: Descriptor[A1] = getDescriptor[A1]
   case class A2(a: List[A1])
-  implicit val cA2: Descriptor[A2] = descriptor[A2]
+  implicit val cA2: Descriptor[A2] = getDescriptor[A2]
   case class A3(a: List[A2])
-  implicit val cA3: Descriptor[A3] = descriptor[A3]
+  implicit val cA3: Descriptor[A3] = getDescriptor[A3]
   case class A4(a: List[A3])
-  implicit val cA4: Descriptor[A4] = descriptor[A4]
+  implicit val cA4: Descriptor[A4] = getDescriptor[A4]
   case class A5(a: List[A4])
 
 }

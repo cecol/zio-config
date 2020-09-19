@@ -1,8 +1,6 @@
 package zio.config.examples
 
-import zio.config.ConfigSource
 import zio.config._, ConfigDescriptor._
-import zio.config.PropertyTree
 import zio.config.examples.typesafe.EitherImpureOps
 
 /**
@@ -37,7 +35,8 @@ object CollectAllExample extends App with EitherImpureOps {
     )
 
   // loadOrThrow here is only for the purpose of example
-  val result: List[Variables]               = read(configOfList from ConfigSource.fromMap(map, "constant")).loadOrThrow
+  val result: List[Variables] = read(configOfList from ConfigSource.fromMap(map, "constant")).loadOrThrow
+
   val written: PropertyTree[String, String] = write(configOfList, result).loadOrThrow
 
   assert(
@@ -59,7 +58,7 @@ object CollectAllExample extends App with EitherImpureOps {
 
   // Read it back from the wrtten tree
   assert(
-    read(configOfList from ConfigSource.fromPropertyTree(written, "tree")) == Right(
+    read(configOfList from ConfigSource.fromPropertyTree(written, "tree", LeafForSequence.Valid)) == Right(
       ::(Variables(1, Some(2)), List(Variables(3, Some(4)), Variables(5, Some(6)), Variables(7, None)))
     )
   )

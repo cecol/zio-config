@@ -3,7 +3,7 @@ package zio.config
 import zio.config.ConfigDescriptor._
 import zio.config.PropertyTree.{ Leaf, Record, Sequence }
 import zio.config.ReadError.Step.{ Index, Key }
-import zio.config.ReadError.{ AndErrors, ForceSeverity, FormatError }
+import zio.config.ReadError.{ FormatError, ListErrors, ZipErrors }
 import zio.test.Assertion._
 import zio.test._
 
@@ -18,7 +18,8 @@ object ListsCornerCasesTest
           val res = read(
             cCfg from ConfigSource.fromPropertyTree(
               Record(Map("a" -> Leaf("sa"), "b" -> Sequence(Nil))),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
 
@@ -35,7 +36,8 @@ object ListsCornerCasesTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Sequence(Sequence(Nil) :: Nil))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -50,7 +52,7 @@ object ListsCornerCasesTest
           val res =
             read(
               cCfg from ConfigSource
-                .fromPropertyTree(Record(Map("a" -> Leaf("sa"))), "tree")
+                .fromPropertyTree(Record(Map("a" -> Leaf("sa"))), "tree", LeafForSequence.Valid)
             )
 
           assert(res)(isRight(equalTo(Cfg("sa", None))))
@@ -65,7 +67,8 @@ object ListsCornerCasesTest
             read(
               cCfg from ConfigSource.fromPropertyTree(
                 Record(Map("a" -> Leaf("sa"), "b" -> Sequence(Nil))),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -78,7 +81,7 @@ object ListsCornerCasesTest
             .default("x" :: Nil))(Cfg, Cfg.unapply)
 
           val res = read(
-            cCfg from ConfigSource.fromPropertyTree(Record(Map("a" -> Leaf("sa"))), "tree")
+            cCfg from ConfigSource.fromPropertyTree(Record(Map("a" -> Leaf("sa"))), "tree", LeafForSequence.Valid)
           )
 
           assert(res)(isRight(equalTo(Cfg("sa", "x" :: Nil))))
@@ -92,7 +95,8 @@ object ListsCornerCasesTest
           val res = read(
             cCfg from ConfigSource.fromPropertyTree(
               Record(Map("a" -> Leaf("sa"), "b" -> Sequence(Nil))),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
 
@@ -102,7 +106,7 @@ object ListsCornerCasesTest
           case class Cfg(a: String, b: Either[List[String], String])
 
           val cCfg = (string("a") |@| nested("b")(
-            listStrict(string).orElseEither(string)
+            list(string).orElseEither(string)
           ))(Cfg, Cfg.unapply)
 
           val res =
@@ -111,7 +115,8 @@ object ListsCornerCasesTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Sequence(Leaf("v") :: Nil))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -121,7 +126,7 @@ object ListsCornerCasesTest
           case class Cfg(a: String, b: Either[String, List[String]])
 
           val cCfg = (string("a") |@| nested("b")(
-            string.orElseEither(listStrict(string))
+            string.orElseEither(list(string))
           ))(Cfg, Cfg.unapply)
 
           val res =
@@ -130,7 +135,8 @@ object ListsCornerCasesTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Sequence(Leaf("v") :: Nil))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -140,12 +146,12 @@ object ListsCornerCasesTest
           case class Cfg(a: String, b: Either[String, List[String]])
 
           val cCfg = (string("a") |@| nested("b")(
-            string.orElseEither(listStrict(string))
+            string.orElseEither(list(string))
           ))(Cfg, Cfg.unapply)
 
           val res = read(
             cCfg from ConfigSource
-              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree")
+              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree", LeafForSequence.Valid)
           )
 
           assert(res)(isRight(equalTo(Cfg("sa", Left("v")))))
@@ -154,27 +160,15 @@ object ListsCornerCasesTest
           case class Cfg(a: String, b: Either[List[String], String])
 
           val cCfg = (string("a") |@| nested("b")(
-            listStrict(string).orElseEither(string)
+            list(string).orElseEither(string)
           ))(Cfg, Cfg.unapply)
 
           val res = read(
             cCfg from ConfigSource
-              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree")
+              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree", LeafForSequence.Invalid)
           )
 
           assert(res)(isRight(equalTo(Cfg("sa", Right("v")))))
-        },
-        test("read scalar as list") {
-          case class Cfg(a: String, b: List[String])
-
-          val cCfg = (string("a") |@| list("b")(string))(Cfg, Cfg.unapply)
-
-          val res = read(
-            cCfg from ConfigSource
-              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree")
-          )
-
-          assert(res)(isRight(equalTo(Cfg("sa", "v" :: Nil))))
         },
         test("read list as scalar") {
           case class Cfg(a: String, b: String)
@@ -189,7 +183,8 @@ object ListsCornerCasesTest
                   "b" -> Sequence(Leaf("v1") :: Leaf("v2") :: Nil)
                 )
               ),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
 
@@ -198,7 +193,7 @@ object ListsCornerCasesTest
         test("read single key objects in nested lists") {
           case class Cfg(a: String, b: List[List[String]])
 
-          val cCfg = (string("a") |@| list("b")(listStrict(string("c"))))(
+          val cCfg = (string("a") |@| list("b")(list(string("c"))))(
             Cfg,
             Cfg.unapply
           )
@@ -220,7 +215,8 @@ object ListsCornerCasesTest
                   )
                 )
               ),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
 
@@ -234,7 +230,7 @@ object ListsCornerCasesTest
           case class Cfg(a: String, b: List[String])
 
           val cCfg =
-            (string("a") |@| nested("b")(listStrict(string)))(Cfg, Cfg.unapply)
+            (string("a") |@| nested("b")(list(string)))(Cfg, Cfg.unapply)
 
           val res = read(
             cCfg from ConfigSource.fromPropertyTree(
@@ -246,7 +242,8 @@ object ListsCornerCasesTest
                   )
                 )
               ),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
 
@@ -255,7 +252,7 @@ object ListsCornerCasesTest
         test("accumulates all errors") {
           case class Cfg(a: List[Boolean], b: List[Int])
 
-          val cCfg = (nested("a")(listStrict(boolean)) |@| nested("b")(listStrict(int)))(Cfg, Cfg.unapply)
+          val cCfg = (nested("a")(list(boolean)) |@| nested("b")(list(int)))(Cfg, Cfg.unapply)
 
           val res = read(
             cCfg from ConfigSource.fromPropertyTree(
@@ -265,26 +262,20 @@ object ListsCornerCasesTest
                   "b" -> Sequence(Leaf("one") :: Leaf("2") :: Nil)
                 )
               ),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
-          val expected: ReadError[String] =
-            AndErrors(
+
+          val expected =
+            ZipErrors(
               List(
-                ForceSeverity(
-                  AndErrors(
-                    List(
-                      FormatError(List(Key("a"), Index(1)), "Provided value is lorem ipsum, expecting the type boolean")
-                    )
-                  ),
-                  false
+                ListErrors(
+                  List(
+                    FormatError(List(Key("a"), Index(1)), "Provided value is lorem ipsum, expecting the type boolean")
+                  )
                 ),
-                ForceSeverity(
-                  AndErrors(
-                    List(FormatError(List(Key("b"), Index(0)), "Provided value is one, expecting the type int"))
-                  ),
-                  false
-                )
+                ListErrors(List(FormatError(List(Key("b"), Index(0)), "Provided value is one, expecting the type int")))
               )
             )
 

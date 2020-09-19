@@ -2,8 +2,6 @@ package zio.config
 
 import zio.config.ConfigDescriptor._
 import zio.config.PropertyTree.{ Leaf, Record, Sequence }
-import zio.config.ReadError.{ AndErrors, ForceSeverity, FormatError }
-import zio.config.ReadError.Step.{ Index, Key }
 import zio.test.Assertion.{ anything, equalTo, isLeft, isNone, isRight }
 import zio.test.{ assert, suite, test }
 
@@ -21,7 +19,8 @@ object MapTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Record(Map("z" -> Record(Map("c" -> Leaf("d"), "f" -> Leaf("h"))))))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
           )
 
@@ -36,7 +35,8 @@ object MapTest
             cCfg from ConfigSource
               .fromPropertyTree(
                 Record(Map("a" -> Leaf("sa"), "b" -> Record(Map("z" -> Record(Map("c" -> Leaf("d"))))))),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
           )
 
@@ -53,7 +53,8 @@ object MapTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Record(Map("z" -> Sequence(List(Record(Map("c" -> Leaf("d"))))))))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
           )
 
@@ -88,7 +89,8 @@ object MapTest
           val res = read(
             cCfg from ConfigSource.fromPropertyTree(
               Record(Map("a" -> Leaf("sa"), "b" -> Record(Map.empty[String, PropertyTree[String, String]]))),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
 
@@ -105,7 +107,8 @@ object MapTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Record(Map("k" -> Record(Map("hello" -> Sequence(Nil))))))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -120,7 +123,7 @@ object MapTest
           val res =
             read(
               cCfg from ConfigSource
-                .fromPropertyTree(Record(Map("a" -> Record(Map("c" -> Leaf("a"))))), "tree")
+                .fromPropertyTree(Record(Map("a" -> Record(Map("c" -> Leaf("a"))))), "tree", LeafForSequence.Valid)
             )
 
           assert(res)(isRight(equalTo(Cfg(None))))
@@ -135,7 +138,8 @@ object MapTest
             read(
               cCfg from ConfigSource.fromPropertyTree(
                 Record(Map("a" -> Leaf("sa"), "b" -> Record(Map.empty[String, PropertyTree[String, String]]))),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -148,7 +152,7 @@ object MapTest
             .default(Map("x" -> "y", "z" -> "a")))(Cfg, Cfg.unapply)
 
           val res = read(
-            cCfg from ConfigSource.fromPropertyTree(Record(Map("a" -> Leaf("sa"))), "tree")
+            cCfg from ConfigSource.fromPropertyTree(Record(Map("a" -> Leaf("sa"))), "tree", LeafForSequence.Valid)
           )
 
           assert(res)(isRight(equalTo(Cfg("sa", Map("x" -> "y", "z" -> "a")))))
@@ -162,7 +166,8 @@ object MapTest
           val res = read(
             cCfg from ConfigSource.fromPropertyTree(
               Record(Map("a" -> Leaf("sa"), "b" -> Record(Map.empty[String, PropertyTree[String, String]]))),
-              "tree"
+              "tree",
+              LeafForSequence.Valid
             )
           )
 
@@ -172,7 +177,7 @@ object MapTest
           case class Cfg(a: String, b: Either[Map[String, String], String])
 
           val cCfg = (string("a") |@| nested("b")(
-            mapStrict(string).orElseEither(string)
+            map(string).orElseEither(string)
           ))(Cfg, Cfg.unapply)
 
           val res =
@@ -181,7 +186,8 @@ object MapTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Record(Map("k" -> PropertyTree.Leaf("v"))))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -191,7 +197,7 @@ object MapTest
           case class Cfg(a: String, b: Either[String, Map[String, String]])
 
           val cCfg = (string("a") |@| nested("b")(
-            string.orElseEither(mapStrict(string))
+            string.orElseEither(map(string))
           ))(Cfg, Cfg.unapply)
 
           val res =
@@ -200,7 +206,8 @@ object MapTest
                 Record(
                   Map("a" -> Leaf("sa"), "b" -> Record(Map("x" -> Leaf("v"))))
                 ),
-                "tree"
+                "tree",
+                LeafForSequence.Valid
               )
             )
 
@@ -210,12 +217,12 @@ object MapTest
           case class Cfg(a: String, b: Either[String, Map[String, String]])
 
           val cCfg = (string("a") |@| nested("b")(
-            string.orElseEither(mapStrict(string))
+            string.orElseEither(map(string))
           ))(Cfg, Cfg.unapply)
 
           val res = read(
             cCfg from ConfigSource
-              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree")
+              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree", LeafForSequence.Valid)
           )
 
           assert(res)(isRight(equalTo(Cfg("sa", Left("v")))))
@@ -224,63 +231,21 @@ object MapTest
           case class Cfg(a: String, b: Either[Map[String, String], String])
 
           val cCfg = (string("a") |@| nested("b")(
-            mapStrict(string).orElseEither(string)
+            map(string).orElseEither(string)
           ))(Cfg, Cfg.unapply)
 
           val res = read(
             cCfg from ConfigSource
-              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree")
+              .fromPropertyTree(Record(Map("a" -> Leaf("sa"), "b" -> Leaf("v"))), "tree", LeafForSequence.Valid)
           )
 
           assert(res)(isRight(equalTo(Cfg("sa", Right("v")))))
         },
-        test("accumulates all errors") {
-          case class Cfg(a: Map[String, Boolean], b: Map[String, Int])
-
-          val cCfg = (nested("a")(mapStrict(boolean)) |@| nested("b")(mapStrict(int)))(Cfg, Cfg.unapply)
-
-          val res = read(
-            cCfg from ConfigSource.fromPropertyTree(
-              Record(
-                Map(
-                  "a" -> Record(Map("a1" -> Leaf("true"), "a2" -> Leaf("lorem ipsum"))),
-                  "b" -> Record(Map("b1" -> Leaf("one"), "b2"  -> Leaf("2")))
-                )
-              ),
-              "tree"
-            )
-          )
-          val expected: ReadError[String] =
-            AndErrors(
-              List(
-                ForceSeverity(
-                  AndErrors(
-                    List(
-                      FormatError(
-                        List(Key("a"), Key("a2"), Index(1)),
-                        "Provided value is lorem ipsum, expecting the type boolean"
-                      )
-                    )
-                  ),
-                  false
-                ),
-                ForceSeverity(
-                  AndErrors(
-                    List(
-                      FormatError(List(Key("b"), Key("b1"), Index(0)), "Provided value is one, expecting the type int")
-                    )
-                  ),
-                  false
-                )
-              )
-            )
-
-          assert(res)(isLeft(equalTo(expected)))
-        },
         test("key doesn't exist in map") {
           val src = ConfigSource.fromPropertyTree(
             PropertyTree.Record(Map("usr" -> PropertyTree.Leaf("v1"))),
-            "src"
+            "src",
+            LeafForSequence.Valid
           )
           val optional: ConfigDescriptor[Option[Map[String, String]]] = map(string("keyNotExists")).optional
           assert(read(optional from src))(isLeft(anything))
@@ -288,7 +253,8 @@ object MapTest
         test("when empty map") {
           val src = ConfigSource.fromPropertyTree(
             PropertyTree.empty,
-            "src"
+            "src",
+            LeafForSequence.Valid
           )
           val optional: ConfigDescriptor[Option[Map[String, String]]] = map(string("usr")).optional
           assert(read(optional from src))(isRight(isNone))

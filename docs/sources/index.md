@@ -1,6 +1,6 @@
 ---
 id: sources_index
-title:  "Sources"
+title:  "Read from various Sources"
 ---
 
 zio-config supports various sources ranging from an in-memory Map, to environment variables, through to a HOCON file.
@@ -56,7 +56,7 @@ Alternatively you can follow below snippet,  yielding Config[MyConfig], which yo
 
 ```scala mdoc:silent
 
-Config.fromMap(Map(), myConfig)
+ZConfig.fromMap(Map(), myConfig)
 // yielding Config[MyConfig], which is a service of config that you can use as ZIO environments.
 
 
@@ -89,7 +89,7 @@ Alternatively you can follow below snippet, yielding Config[MyConfig], which you
 
 ```scala mdoc:silent
 
-Config.fromMultiMap(Map(), myConfig, "constant")
+ZConfig.fromMultiMap(Map(), myConfig, "constant")
 // yielding Config[MyConfig], which is a service of config that you can use as ZIO environments.
 
 ```
@@ -183,7 +183,7 @@ val javaPropertiesSourceWithList =
 
 ```scala mdoc:silent
 
-Config.fromPropertiesFile("filepath", myConfig)
+ZConfig.fromPropertiesFile("filepath", myConfig)
 
 // yielding Config[MyConfig] which you provide to
 // functions with zio environment as Config[MyConfig]
@@ -389,6 +389,55 @@ assert(read(list("users")(string) from listSource2) == Right(List("Jane", "Jack"
 
 ```
 
+### Behaviour of List in various sources
+
+No single values will be regarded as list. This is based on feedback from users.
+
+For the config:
+ 
+```
+Case class Config(key: List[String]) 
+```
+
+If the source is below HOCON (or json)
+
+```scala
+ {
+   Key : value
+ }
+```
+
+then it fails, saying a `Sequence` is expected. This is quite intuitive but worth mentioning for users who are new to HOCON.
+
+However the following configs will work, as it clearly indicate it is a `List` with square brackets 
+```scala
+{
+   Key: [value]
+}
+```
+```scala
+
+{
+   key: [value1, value2]
+}
+
+
+```
+
+If the source is a map given below (for example, in system environment), then it succeeds given any delimiter
+as it contains only one single value.
+
+```scala
+export key="value"
+``` 
+
+Given `valueDelimiter=Some(',')` the following config will work and we are able to retrieve List(value1, value2)
+
+```scala
+export key="value1, value2"
+
+```
+
 ### A Production application config using command line arguments (demo)
 
 ```scala mdoc:silent
@@ -406,6 +455,6 @@ val complexSource = ConfigSource.fromCommandLineArgs(
   Some('.'),
   Some(',')
 )
-val appConfig = descriptor[AppConfig] from complexSource
+val appConfig = read(descriptor[AppConfig] from complexSource)
 
 ```

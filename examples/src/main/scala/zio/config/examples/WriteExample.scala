@@ -1,6 +1,5 @@
 package zio.config.examples
 
-import zio.config.{ ConfigSource, PropertyTree }
 import zio.config._, ConfigDescriptor._
 import zio.config.examples.typesafe.EitherImpureOps
 
@@ -44,7 +43,7 @@ object WriteExample extends App with EitherImpureOps {
   )
 
   val readFromTree: A =
-    read(description from ConfigSource.fromPropertyTree(written, "tree")).loadOrThrow
+    read(description from ConfigSource.fromPropertyTree(written, "tree", LeafForSequence.Valid)).loadOrThrow
 
   assert(readFromTree == readFromSource)
 

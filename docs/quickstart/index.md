@@ -49,10 +49,8 @@ We must fetch the configuration from the environment to a case class (product) i
 
 ```scala mdoc:silent
 import zio.IO
-import zio.config.config
-import zio.config.ConfigDescriptor, ConfigDescriptor._
-import zio.config.ConfigSource, ConfigSource._
-import zio.config.Config
+
+import zio.config._, ConfigDescriptor._, ConfigSource._
 
 ```
 
@@ -87,14 +85,18 @@ val myConfigTupled: ConfigDescriptor[(String, Int, String)] =
 ## Fully automated Config Description
 
 If you don't like describing your configuration manually, and rely on the names of the parameter in the case class (or sealed trait),
-there is a separate module called `zio-config-magnolia`.
+there is a separate module called `zio-config-magnolia`. 
+
+Note:  `zio-config-shapeless` is an alternative to `zio-config-magnolia` to support scala 2.11 projects. 
+It will be deprecated once we find users have moved on from scala 2.11. 
+
 
 ```scala mdoc:silent
 
 import zio.config._
-import zio.config.magnolia.DeriveConfigDescriptor.descriptor
+import zio.config.magnolia.DeriveConfigDescriptor.{Descriptor, descriptor}
 
-val myConfigAutomatic: ConfigDescriptor[MyConfig] = descriptor[MyConfig]
+val myConfigAutomatic = descriptor[MyConfig]
 
 ```
 
@@ -123,7 +125,7 @@ read(myConfig from source)
 
 // Alternatively, you can rely on `Config.from..` pattern to get ZLayers.
 val result =
-  Config.fromMap(map, myConfig)
+  ZConfig.fromMap(map, myConfig)
 
 // Layer[ReadError[String], Config[A]]  
 
@@ -160,7 +162,7 @@ val betterConfig =
     string("DB_URL") ?? "url of database"
    )(MyConfig.apply, MyConfig.unapply)
 
-generateDocs(betterConfig)
+generateDocs(betterConfig).toTable.asGithubFlavouredMarkdown
 // Custom documentation along with auto generated docs
 ```
 
@@ -186,9 +188,55 @@ generateReport(myConfig, MyConfig("xyz", 8888, "postgres"))
 // Generates documentation showing value of each parameter
 
 ```
+### Accumulating all errors
 
+For any misconfiguration, the ReadError collects all of them with proper semantics: `AndErrors` and `OrErrors`. 
+Instead of directly printing misconfigurations, the `ReadError.prettyPrint` shows the path, detail of collected misconfigurations.
 
-More details in [here](../configdescriptor/index.md).
+1. All misconfigurations of `AndErrors` are put in parallel lines.
+```text
+╥
+╠══╗ 
+║  ║ FormatError
+║ MissingValue
+``` 
+2. `OrErrors` are in the same line which indicates a sequential misconfiguration    
+```text
+╥
+╠MissingValue
+║
+╠FormatError
+```
+
+Here is a complete example:
+
+```text
+   ReadError:
+   ╥
+   ╠══╦══╗
+   ║  ║  ║
+   ║  ║  ╠─MissingValue
+   ║  ║  ║ path: var2
+   ║  ║  ║ Details: value of type string
+   ║  ║  ║ 
+   ║  ║  ╠─MissingValue path: envvar3
+   ║  ║  ║ path: var3
+   ║  ║  ║ Details: value of type string
+   ║  ║  ║ 
+   ║  ║  ▼
+   ║  ║
+   ║  ╠─FormatError
+   ║  ║ cause: Provided value is wrong, expecting the type int
+   ║  ║ path: var1
+   ║  ▼
+   ▼
+
+```
+
+It says, fix `FormatError` related to path "var1" in the source. For the next error, either provide var2 or var3
+to fix `MissingValue` error.
+
+**Note**: Use prettyPrint method to avoid having to avoid seeing highly nested ReadErrors, that can be difficult to read.
 
 ## Config is your ZIO environment
 
@@ -205,14 +253,14 @@ case class ApplicationConfig(bridgeIp: String, userName: String)
 val configuration =
   (string("bridgeIp") |@| string("username"))(ApplicationConfig.apply, ApplicationConfig.unapply)
 
-val finalExecution: ZIO[Config[ApplicationConfig] with Console, Nothing, Unit] =
+val finalExecution: ZIO[ZConfig[ApplicationConfig] with Console, Nothing, Unit] =
   for {
-    appConfig <- config[ApplicationConfig]
+    appConfig <- getConfig[ApplicationConfig]
     _         <- putStrLn(appConfig.bridgeIp)
     _         <- putStrLn(appConfig.userName)
   } yield ()
 
-val configLayer = Config.fromPropertiesFile("file-location", configuration)
+val configLayer = ZConfig.fromPropertiesFile("file-location", configuration)
 
 // Main App
 val pgm = finalExecution.provideLayer(configLayer ++ Console.live)

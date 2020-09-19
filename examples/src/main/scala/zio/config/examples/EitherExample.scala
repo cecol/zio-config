@@ -1,9 +1,6 @@
 package zio.config.examples
 
-import zio.config.ConfigDescriptor._
-import zio.config.ReadError.{ FormatError, MissingValue, OrErrors, Step }
-import zio.config.ConfigSource
-import zio.config._
+import zio.config._, ConfigDescriptor._
 
 object EitherExample extends App {
   final case class Ldap(value: String)  extends AnyVal
@@ -45,21 +42,29 @@ object EitherExample extends App {
   val invalidSource =
     ConfigSource.fromMap(parseErrorConfig, "constant")
 
-  assert(
-    read(prodOrDev from invalidSource) ==
-      Left(
-        // OrErrors indicate that either fix the error with x1 or the error with x5
-        OrErrors(
-          List(
-            MissingValue(List(Step.Key("x1"))),
-            FormatError(
-              List(Step.Key("x5")),
-              parseErrorMessage("notadouble", "double")
-            )
-          )
-        )
-      )
+  println(
+    read(prodOrDev from invalidSource).swap.map(_.prettyPrint()).swap
   )
+  /*
+      ╥
+      ╠══╗
+      ║  ║
+      ║  ╠─MissingValue
+      ║  ║ path: x1
+      ║  ║ Details: value of type string
+      ║  ▼
+      ║
+      ╠══╗
+      ║  ║
+      ║  ╠─FormatError
+      ║  ║ cause: Provided value is notadouble, expecting the type double
+      ║  ║ path: x5
+      ║  ▼
+      ▼
+   */
+
+  // Please refer to accumulated errors section in quick start page to know more about the structure of errors.
+  // In the above case, it means, fix either x1 or x5.
 
   // It chooses the left, Prod
   val allConfigsExist =

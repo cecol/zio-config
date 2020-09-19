@@ -1,6 +1,6 @@
 package zio.config.typesafe
 
-import zio.config.{ BaseSpec, ConfigSource }
+import zio.config.{ BaseSpec }
 import zio.config._, ConfigDescriptor._
 import zio.test.Assertion._
 import zio.test._
@@ -195,13 +195,58 @@ object TypesafeConfigReadWriteTest
             write(complexDescription, readComplexSource).loadOrThrow
 
           val readWrittenProperty =
-            read(complexDescription from ConfigSource.fromPropertyTree(writtenProperty, "tree")).loadOrThrow
+            read(complexDescription from ConfigSource.fromPropertyTree(writtenProperty, "tree", LeafForSequence.Valid)).loadOrThrow
 
           val readWrittenHocon =
             read(complexDescription from TypesafeConfigSource.fromHoconString(writtenHocon).loadOrThrow).loadOrThrow
 
           assert((readWrittenHocon, readWrittenProperty, readComplexSource))(
             equalTo((readComplexSource, expectedResult, expectedResult))
+          )
+        },
+        test(
+          "duplicate keys source: read(descriptor from typesafeSource) == read(descriptor from write(descriptor, read(descriptor from typesafeSource)))"
+        ) {
+          final case class A(metadata: List[B])
+
+          final case class B(metadata: List[C])
+
+          final case class C(c: String, metadata: String)
+
+          val cDescription: ConfigDescriptor[C] = (string("c") |@| string("metadata"))((c, m) => C(c, m), C.unapply)
+          val bDescription: ConfigDescriptor[B] = list("metadata")(cDescription)(B.apply, B.unapply)
+          val aDescription: ConfigDescriptor[A] = list("metadata")(bDescription)(A.apply, A.unapply)
+
+          val success = A(List(B(List(C(c = "abc", metadata = "xyz")))))
+
+          val duplicateKeysHocon =
+            s"""
+               | metadata: [
+               |   {
+               |     metadata: [
+               |       {
+               |         "c": "abc",
+               |         "metadata": "xyz"
+               |       }
+               |     ]
+               |   }
+               | ]
+               |""".stripMargin
+
+          val duplicateKeysSource: ConfigSource = TypesafeConfigSource.fromHoconString(duplicateKeysHocon).loadOrThrow
+
+          val readSource = read(aDescription from duplicateKeysSource)
+
+          val written =
+            write(aDescription, readSource.loadOrThrow).loadOrThrow.toHocon.render()
+
+          val readWrittenHocon =
+            read(aDescription from TypesafeConfigSource.fromHoconString(written).loadOrThrow).loadOrThrow
+
+          assert((readSource, readWrittenHocon))(
+            equalTo(
+              (Right(success), success)
+            )
           )
         }
       )
@@ -278,7 +323,7 @@ object TypesafeConfigReadWriteTestUtils {
        |""".stripMargin
 
   val complexConfig: ConfigDescriptor[Nested] =
-    nested("result")(mapStrict(sssDescription))(
+    nested("result")(map(sssDescription))(
       TypesafeConfigReadWriteTestUtils.Nested.apply,
       TypesafeConfigReadWriteTestUtils.Nested.unapply
     )
